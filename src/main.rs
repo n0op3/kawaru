@@ -5,6 +5,7 @@ use std::{
 
 use clap::Parser;
 use file_identify::tags_from_path;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use regex::bytes::Regex;
 use walkdir::DirEntry;
 
@@ -39,7 +40,7 @@ fn main() {
     let regex = Regex::new(&args.regex).unwrap();
 
     let replacement = args.replacement.into_bytes();
-    for file in walkdir::WalkDir::new(
+    walkdir::WalkDir::new(
         args.directory
             .map(PathBuf::from)
             .unwrap_or(std::env::current_dir().expect("couldn't get current_dir")),
@@ -54,10 +55,11 @@ fn main() {
                 .is_none_or(|regex| !regex.is_match(file.file_name().as_encoded_bytes()))
     })
     .collect::<Vec<DirEntry>>()
-    {
+    .par_iter()
+    .for_each(|file| {
         println!("Replacing text in {:?}", file.file_name());
 
         let contents = read(file.path()).unwrap();
         write(file.path(), regex.replace_all(&contents, &replacement)).unwrap();
-    }
+    });
 }
