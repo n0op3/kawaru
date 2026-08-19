@@ -5,19 +5,28 @@ use std::{
 
 use clap::Parser;
 use file_identify::tags_from_path;
+use ignore::{DirEntry, WalkBuilder};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use regex::bytes::Regex;
-use walkdir::DirEntry;
 
 #[derive(Parser)]
 #[command(
     version,
-    about = "Simple find-and-replace supporting both text and binary files"
+    about = "Simple find-and-replace supporting both text and binary files",
+    disable_help_flag = true
 )]
 struct Args {
     /// Whether to also replace the text in binary files
     #[arg(short, long)]
     binary: bool,
+
+    /// Whether to alter hidden files
+    #[arg(short, long)]
+    hidden: bool,
+
+    /// Respects .gitignore and .git/info/exclude
+    #[arg(short, long)]
+    git: bool,
 
     /// Regex to exclude files
     #[arg(short, long)]
@@ -43,19 +52,27 @@ fn main() {
 
     let replacement = args.replacement.into_bytes();
 
-    walkdir::WalkDir::new(
+    WalkBuilder::new(
         args.directory
             .map(PathBuf::from)
             .unwrap_or(std::env::current_dir().expect("couldn't get current_dir")),
     )
-    .into_iter()
+    .hidden(args.hidden)
+    .git_ignore(args.git)
+    .git_exclude(args.git)
+    .parents(true)
+    .ignore(true)
+    .build()
     .filter_map(|entry| entry.ok())
     .filter(|file| {
-        file.metadata().is_ok_and(|metadata| metadata.is_file())
-            && (args.binary || tags_from_path(file.path()).is_ok_and(|tags| tags.contains("text")))
-            && exclusion_regex
-                .as_ref()
-                .is_none_or(|regex| !regex.is_match(file.file_name().as_encoded_bytes()))
+        args.hidden
+            || !file.file_name().to_string_lossy().starts_with(".")
+                && file.metadata().is_ok_and(|metadata| metadata.is_file())
+                && (args.binary
+                    || tags_from_path(file.path()).is_ok_and(|tags| tags.contains("text")))
+                && exclusion_regex
+                    .as_ref()
+                    .is_none_or(|regex| !regex.is_match(file.file_name().as_encoded_bytes()))
     })
     .collect::<Vec<DirEntry>>()
     .par_iter()
