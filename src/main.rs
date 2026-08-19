@@ -36,10 +36,13 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
-    let exclusion_regex = args.exclude.map(|regex| Regex::new(&regex).unwrap());
-    let regex = Regex::new(&args.regex).unwrap();
+    let exclusion_regex = args
+        .exclude
+        .map(|regex| Regex::new(&regex).expect("failed to compile the regex"));
+    let regex = Regex::new(&args.regex).expect("failed to compile the regex");
 
     let replacement = args.replacement.into_bytes();
+
     walkdir::WalkDir::new(
         args.directory
             .map(PathBuf::from)
@@ -48,18 +51,26 @@ fn main() {
     .into_iter()
     .filter_map(|entry| entry.ok())
     .filter(|file| {
-        file.metadata().unwrap().is_file()
-            && (args.binary || tags_from_path(file.path()).unwrap().contains("text"))
+        file.metadata().is_ok_and(|metadata| metadata.is_file())
+            && (args.binary || tags_from_path(file.path()).is_ok_and(|tags| tags.contains("text")))
             && exclusion_regex
                 .as_ref()
                 .is_none_or(|regex| !regex.is_match(file.file_name().as_encoded_bytes()))
     })
     .collect::<Vec<DirEntry>>()
     .par_iter()
-    .for_each(|file| {
+    .map(|file| -> Result<_, (String, anyhow::Error)> {
         println!("Replacing text in {:?}", file.file_name());
 
-        let contents = read(file.path()).unwrap();
-        write(file.path(), regex.replace_all(&contents, &replacement)).unwrap();
-    });
+        let path = file.path().to_string_lossy().to_string();
+
+        let contents = read(file.path()).map_err(|e| (path.clone(), anyhow::anyhow!(e)))?;
+
+        write(file.path(), regex.replace_all(&contents, &replacement))
+            .map_err(|e| (path, anyhow::anyhow!(e)))?;
+
+        Ok(())
+    })
+    .filter_map(|result| result.err())
+    .for_each(|error| eprintln!("Could not process {}: {:?}", error.0, error.1));
 }
