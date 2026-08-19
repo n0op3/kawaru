@@ -65,14 +65,12 @@ fn main() {
     .build()
     .filter_map(|entry| entry.ok())
     .filter(|file| {
-        args.hidden
-            || !file.file_name().to_string_lossy().starts_with(".")
-                && file.metadata().is_ok_and(|metadata| metadata.is_file())
-                && (args.binary
-                    || tags_from_path(file.path()).is_ok_and(|tags| tags.contains("text")))
-                && exclusion_regex
-                    .as_ref()
-                    .is_none_or(|regex| !regex.is_match(file.file_name().as_encoded_bytes()))
+        (args.hidden || !file.file_name().to_string_lossy().starts_with("."))
+            && file.metadata().is_ok_and(|metadata| metadata.is_file())
+            && (args.binary || tags_from_path(file.path()).is_ok_and(|tags| tags.contains("text")))
+            && exclusion_regex
+                .as_ref()
+                .is_none_or(|regex| !regex.is_match(file.file_name().as_encoded_bytes()))
     })
     .collect::<Vec<DirEntry>>()
     .par_iter()
