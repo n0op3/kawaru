@@ -1,6 +1,7 @@
 use std::{
-    fs::{read, write},
-    path::PathBuf,
+    fs::read,
+    io::Write,
+    path::{Path, PathBuf},
 };
 
 use clap::Parser;
@@ -8,6 +9,7 @@ use file_identify::tags_from_path;
 use ignore::{DirEntry, WalkBuilder};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use regex::bytes::Regex;
+use tempfile::NamedTempFile;
 
 #[derive(Parser)]
 #[command(
@@ -79,10 +81,18 @@ fn main() {
 
         let path = file.path().to_string_lossy().to_string();
 
-        let contents = read(file.path()).map_err(|e| (path.clone(), anyhow::anyhow!(e)))?;
+        let result = (|| -> anyhow::Result<()> {
+            let contents = read(file.path())?;
 
-        write(file.path(), regex.replace_all(&contents, &replacement))
-            .map_err(|e| (path, anyhow::anyhow!(e)))?;
+            let mut tmp = NamedTempFile::new_in(file.path().parent().unwrap_or(Path::new(".")))?;
+
+            tmp.write_all(&regex.replace_all(&contents, &replacement))?;
+            tmp.persist(file.path())?;
+
+            Ok(())
+        })();
+
+        result.map_err(|e| (path, e))?;
 
         Ok(())
     })
