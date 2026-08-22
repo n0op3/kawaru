@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use clap::Parser;
+use clap::{ArgAction, Parser};
 use file_identify::tags_from_path;
 use ignore::{DirEntry, WalkBuilder};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -18,6 +18,9 @@ use tempfile::NamedTempFile;
     disable_help_flag = true
 )]
 struct Args {
+    #[arg(long = "help", action = ArgAction::Help)]
+    help: Option<bool>,
+
     /// Whether to also replace the text in binary files
     #[arg(short, long)]
     binary: bool,
