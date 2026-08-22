@@ -62,9 +62,9 @@ fn main() {
             .map(PathBuf::from)
             .unwrap_or(std::env::current_dir().expect("couldn't get current_dir")),
     )
-    .hidden(args.hidden)
-    .git_ignore(args.git)
-    .git_exclude(args.git)
+    .hidden(!args.hidden)
+    .git_ignore(!args.git)
+    .git_exclude(!args.git)
     .parents(true)
     .ignore(true)
     .build()
